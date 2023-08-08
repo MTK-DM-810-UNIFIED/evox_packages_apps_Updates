@@ -61,6 +61,14 @@
                     tools:visibility="visible" />
 
                 <TextView
+                    android:id="@+id/progress_percent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    tools:text="65%" />
+
+                <TextView
                     android:id="@+id/progress_text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -70,7 +78,7 @@
                     android:textAlignment="center"
                     android:textSize="14sp"
                     android:visibility="invisible"
-                    tools:text="162 of 300 MB (3 minutes left) • 65%"
+                    tools:text="162 of 1.1 GB (3 minutes left)"
                     tools:visibility="visible" />
             </RelativeLayout>
 
@@ -87,6 +95,35 @@
                 android:textColor="?android:attr/textColorPrimary"
                 android:textSize="24sp"
                 android:textStyle="bold"
+                android:visibility="visible" />
+
+            <TextView
+                android:id="@+id/whats_new_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="start"
+                android:paddingStart="16dp"
+                android:paddingTop="5dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="5dp"
+                android:fontFamily="google-sans"
+                android:text="@string/what_s_new"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:visibility="visible" />
+
+            <TextView
+                android:id="@+id/whats_new"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="@string/this_is_what_s_new"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="16sp"
                 android:visibility="visible" />
 
             <TextView
@@ -163,7 +200,7 @@
                 android:maxLines="2"
                 android:textSize="14sp"
                 android:visibility="gone"
-                tools:text="29 February 2018" />
+                tools:text="18 June 2023" />
         </LinearLayout>
 
     </ScrollView>

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2017 The LineageOS Project
+ * Copyright (C) 2017-2023 The LineageOS Project
  * Copyright (C) 2019 The PixelExperience Project
- * Copyright (C) 2019-2020 The Evolution X Project
+ * Copyright (C) 2019-2023 The Evolution X Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.os.Environment;
 import android.os.SystemProperties;
@@ -103,8 +104,14 @@ public class Utils {
         update.setWhatsNew(object.isNull("whatsNew") ? "" : object.getString("whatsNew"));
         update.setNotificationContent(object.isNull("notification") ? "" : object.getString("notification"));
 
+        Constants.fileName = object.getString("filename");
+
         Log.d(TAG, update.getWhatsNew());
         return update;
+    }
+
+    public static String getDeviceCodeName() {
+        return SystemProperties.get(Constants.PROP_DEVICE);
     }
 
     public static boolean isCompatible(UpdateBaseInfo update) {
@@ -178,24 +185,24 @@ public class Utils {
     }
 
     public static boolean isNetworkAvailable(Context context) {
-        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(
-                Context.CONNECTIVITY_SERVICE);
-        if (cm == null) {
-            return false;
+        ConnectivityManager cm = context.getSystemService(ConnectivityManager.class);
+        Network activeNetwork = cm.getActiveNetwork();
+        NetworkCapabilities networkCapabilities = cm.getNetworkCapabilities(activeNetwork);
+        if (networkCapabilities != null &&
+                networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+            return networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                    || networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                    || networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_USB)
+                    || networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                    || networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
         }
-        NetworkInfo info = cm.getActiveNetworkInfo();
-        return !(info == null || !info.isConnected() || !info.isAvailable());
+        return false;
     }
 
-    public static boolean isOnWifiOrEthernet(Context context) {
-        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(
-                Context.CONNECTIVITY_SERVICE);
-        if (cm == null) {
-            return false;
-        }
-        NetworkInfo info = cm.getActiveNetworkInfo();
-        return (info != null && (info.getType() == ConnectivityManager.TYPE_ETHERNET
-                || info.getType() == ConnectivityManager.TYPE_WIFI));
+    public static boolean isNetworkMetered(Context context) {
+        ConnectivityManager cm = context.getSystemService(ConnectivityManager.class);
+        return cm.isActiveNetworkMetered();
     }
 
     public static boolean checkForNewUpdates(File oldJson, File newJson)

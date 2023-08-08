@@ -32,11 +32,20 @@
     </LinearLayout>
 
     <Switch
-        android:id="@+id/preferences_mobile_data_warning"
+        android:id="@+id/preferences_metered_network_warning"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
-        android:text="@string/menu_mobile_data_warning"
+        android:text="@string/menu_metered_network_warning"
+        android:textSize="16sp"
+        android:fontFamily="@*android:string/config_headlineFontFamily" />
+
+    <Switch
+        android:id="@+id/preferences_ab_perf_mode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="@string/menu_ab_perf_mode"
         android:textSize="16sp"
         android:fontFamily="@*android:string/config_headlineFontFamily" />
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The LineageOS Project
+ * Copyright (C) 2017-2023 The LineageOS Project
  * Copyright (C) 2019 The PixelExperience Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,7 @@ import android.widget.CheckBox;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import org.evolution.ota.R;
 import org.evolution.ota.controller.UpdaterController;
 import org.evolution.ota.controller.UpdaterService;
 import org.evolution.ota.misc.Constants;
@@ -68,6 +69,8 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
             | BatteryManager.BATTERY_PLUGGED_WIRELESS;
 
     private final float mAlphaDisabledValue;
+
+    public static String changelogData;
 
     private List<String> mDownloadIds;
     private String mSelectedDownload;
@@ -137,6 +140,9 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
                     update.getFinalizing() ?
                             R.string.finalizing_package :
                             R.string.preparing_ota_first_boot);
+            String percentage = NumberFormat.getPercentInstance().format(
+                    update.getInstallProgress() / 100.f);
+            viewHolder.mPercentage.setText(percentage);
             viewHolder.mProgressBar.setIndeterminate(false);
             viewHolder.mProgressBar.setProgress(update.getInstallProgress());
         } else if (mUpdaterController.isVerifyingUpdate(downloadId)) {
@@ -150,11 +156,13 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
             String total = Utils.readableFileSize(update.getFileSize());
             String percentage = NumberFormat.getPercentInstance().format(
                     update.getProgress() / 100.f);
+            viewHolder.mPercentage.setText(percentage);
             viewHolder.mProgressText.setText(mActivity.getString(R.string.list_download_progress_new,
                     downloaded, total, percentage));
             viewHolder.mProgressBar.setIndeterminate(false);
             viewHolder.mProgressBar.setProgress(update.getProgress());
         }
+        viewHolder.mWhatsNew.setText(changelogData != null ? changelogData : "");
 
         String fileSize = Utils.readableFileSize(update.getFileSize());
         viewHolder.mBuildSize.setText(String
@@ -183,6 +191,7 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
             setupOptionMenuListeners(update, false, viewHolder);
             setButtonAction(viewHolder.mAction, Action.DOWNLOAD, downloadId, !isBusy());
         }
+        viewHolder.mWhatsNew.setText(changelogData != null ? changelogData : "");
 
         String fileSize = Utils.readableFileSize(update.getFileSize());
         viewHolder.mBuildSize.setText(String
@@ -225,6 +234,8 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
             default:
                 throw new RuntimeException("Unknown update status");
         }
+
+        viewHolder.mWhatsNew.setText(changelogData != null ? changelogData : "");
 
         String buildDate = StringGenerator.getDateLocalizedUTC(mActivity,
                 DateFormat.LONG, update.getTimestamp());
@@ -270,27 +281,28 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
             return;
         }
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mActivity);
-        boolean warn = preferences.getBoolean(Constants.PREF_MOBILE_DATA_WARNING, true);
-        if (Utils.isOnWifiOrEthernet(mActivity) || !warn) {
+        boolean warn = preferences.getBoolean(Constants.PREF_METERED_NETWORK_WARNING,
+                mActivity.getResources().getBoolean(R.bool.config_metered_network_warning));
+        if (!(Utils.isNetworkMetered(mActivity) && warn)) {
             mUpdaterController.startDownload(downloadId);
             return;
         }
 
         View checkboxView = LayoutInflater.from(mActivity).inflate(R.layout.checkbox_view, null);
         CheckBox checkbox = checkboxView.findViewById(R.id.checkbox);
-        checkbox.setText(R.string.checkbox_mobile_data_warning);
+        checkbox.setText(R.string.checkbox_metered_network_warning);
 
         mActivity.findViewById(R.id.mobile_data_warning).setVisibility(View.VISIBLE);
 
         new AlertDialog.Builder(mActivity, R.style.AppTheme_AlertDialogStyle)
-                .setTitle(R.string.update_on_mobile_data_title)
-                .setMessage(R.string.update_on_mobile_data_message)
+                .setTitle(R.string.update_over_metered_network_title)
+                .setMessage(R.string.update_over_metered_network_message)
                 .setView(checkboxView)
                 .setPositiveButton(R.string.action_download,
                         (dialog, which) -> {
                             if (checkbox.isChecked()) {
                                 preferences.edit()
-                                        .putBoolean(Constants.PREF_MOBILE_DATA_WARNING, false)
+                                        .putBoolean(Constants.PREF_METERED_NETWORK_WARNING, false)
                                         .apply();
                                 mActivity.supportInvalidateOptionsMenu();
                             }
@@ -487,11 +499,15 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
                 R.attr.actionOverflowMenuStyle, 0);
         popupMenu.inflate(R.menu.menu_action_mode);
 
+        boolean shouldShowDelete = canDelete;
+        boolean isVerified = update.getPersistentStatus() == UpdateStatus.Persistent.VERIFIED;
+        if (isVerified && !Utils.canInstall(update) && !update.getAvailableOnline()) {
+            shouldShowDelete = false;
+        }
         MenuBuilder menu = (MenuBuilder) popupMenu.getMenu();
-        menu.findItem(R.id.menu_delete_action).setVisible(canDelete);
+        menu.findItem(R.id.menu_delete_action).setVisible(shouldShowDelete);
         menu.findItem(R.id.menu_copy_url).setVisible(update.getAvailableOnline());
-        menu.findItem(R.id.menu_export_update).setVisible(
-                update.getPersistentStatus() == UpdateStatus.Persistent.VERIFIED);
+        menu.findItem(R.id.menu_export_update).setVisible(isVerified);
 
         popupMenu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
@@ -574,9 +590,11 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
 
         private TextView mBuildDate;
         private TextView mBuildSize;
+        private TextView mWhatsNew;
 
         private ProgressBar mProgressBar;
         private TextView mProgressText;
+        private TextView mPercentage;
 
         ViewHolder(final View view) {
             super(view);
@@ -584,9 +602,11 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
 
             mBuildDate = view.findViewById(R.id.build_date);
             mBuildSize = view.findViewById(R.id.build_size);
+            mWhatsNew = view.findViewById(R.id.whats_new);
 
             mProgressBar = view.findViewById(R.id.progress_bar);
             mProgressText = view.findViewById(R.id.progress_text);
+            mPercentage = view.findViewById(R.id.progress_percent);
         }
     }
 }

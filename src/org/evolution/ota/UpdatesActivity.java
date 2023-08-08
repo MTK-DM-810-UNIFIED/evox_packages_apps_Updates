@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The LineageOS Project
+ * Copyright (C) 2017-2023 The LineageOS Project
  * Copyright (C) 2019 The PixelExperience Project
  * Copyright (C) 2019-2021 The Evolution X Project
  *
@@ -24,6 +24,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -55,13 +56,15 @@ import androidx.recyclerview.widget.SimpleItemAnimator;
 
 import com.google.android.material.snackbar.Snackbar;
 
-import org.json.JSONException;
+import org.evolution.ota.R;
+import org.evolution.ota.misc.FetchChangelog;
 import org.evolution.ota.controller.UpdaterController;
 import org.evolution.ota.controller.UpdaterService;
 import org.evolution.ota.download.DownloadClient;
 import org.evolution.ota.misc.Constants;
 import org.evolution.ota.misc.Utils;
 import org.evolution.ota.model.UpdateInfo;
+import org.json.JSONException;
 
 import java.io.File;
 import java.io.IOException;
@@ -86,6 +89,7 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
 
     private ProgressBar progressBar;
     private Button checkUpdateButton;
+    private Button changelogButton;
     private TextView updateStatus;
     private TextView androidVersion;
     private TextView evolutionVersion;
@@ -139,11 +143,15 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
         updateIcon = (ImageView) findViewById(R.id.update_ic);
         updateIcon.setOnClickListener(this);
 
+        FetchChangelog changelog = new FetchChangelog();
+        changelog.execute();
+
         sharedPref = this.getPreferences(Context.MODE_PRIVATE);
         LastUpdateCheck = sharedPref.getString("LastUpdateCheck", "Not checked");
 
         progressBar = findViewById(R.id.progress_bar);
         checkUpdateButton = findViewById(R.id.check_updates);
+        changelogButton = findViewById(R.id.changelog_button);
         updateStatus = findViewById(R.id.no_new_updates_view);
         androidVersion = findViewById(R.id.android_version);
         evolutionVersion = findViewById(R.id.evolution_version);
@@ -165,9 +173,16 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
         checkUpdateButton.setOnClickListener(view -> {
             progressBar.setVisibility(View.VISIBLE);
             checkUpdateButton.setVisibility(View.GONE);
+            changelogButton.setVisibility(View.GONE);
             securityVersion.setVisibility(View.GONE);
             lastUpdateCheck.setVisibility(View.GONE);
             downloadUpdatesList(true);
+        });
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+
+	changelogButton.setOnClickListener(view -> {
+            startActivity(new Intent(this, LocalChangelogActivity.class));
         });
 
         downloadUpdatesList(true);
@@ -351,6 +366,7 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
         lastUpdateCheck.setVisibility(View.GONE);
 
         checkUpdateButton.setVisibility(View.GONE);
+        changelogButton.setVisibility(View.GONE);
     }
 
     private void loadUpdatesList(File jsonFile, boolean manualRefresh)
@@ -505,6 +521,7 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
     private void refreshAnimationStart() {
         progressBar.setVisibility(View.VISIBLE);
         checkUpdateButton.setVisibility(View.GONE);
+        changelogButton.setVisibility(View.GONE);
         securityVersion.setVisibility(View.GONE);
         lastUpdateCheck.setVisibility(View.GONE);
         androidVersion.setVisibility(View.GONE);
@@ -524,6 +541,7 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
     private void refreshAnimationStop() {
         progressBar.setVisibility(View.GONE);
         checkUpdateButton.setVisibility(View.VISIBLE);
+        changelogButton.setVisibility(View.VISIBLE);
         if (isUpdateAvailable) {
             showUpdates();
         } else {
@@ -540,13 +558,19 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
         View view = LayoutInflater.from(this).inflate(R.layout.preferences_dialog, null);
         Spinner autoCheckInterval =
                 view.findViewById(R.id.preferences_auto_updates_check_interval);
-        Switch dataWarning = view.findViewById(R.id.preferences_mobile_data_warning);
+        Switch meteredNetworkWarning = view.findViewById(
+                R.id.preferences_metered_network_warning);
+        Switch abPerfMode = view.findViewById(R.id.preferences_ab_perf_mode);
         EditText customURLInput = view.findViewById(R.id.preferences_customOTAUrl);
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         autoCheckInterval.setSelection(Utils.getUpdateCheckSetting(this));
         customURLInput.setText(prefs.getString(Constants.PREF_CUSTOM_OTA_URL, Constants.OTA_URL));
-        dataWarning.setChecked(prefs.getBoolean(Constants.PREF_MOBILE_DATA_WARNING, true));
+        meteredNetworkWarning.setChecked(prefs.getBoolean(Constants.PREF_METERED_NETWORK_WARNING,
+                prefs.getBoolean(Constants.PREF_MOBILE_DATA_WARNING,
+                        getResources().getBoolean(R.bool.config_metered_network_warning))));
+        abPerfMode.setChecked(prefs.getBoolean(Constants.PREF_AB_PERF_MODE,
+                getResources().getBoolean(R.bool.config_ab_perf_mode)));
 
         new AlertDialog.Builder(this, R.style.AppTheme_AlertDialogStyle)
                 .setTitle(R.string.menu_preferences)
@@ -556,8 +580,9 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
                     prefs.edit()
                             .putInt(Constants.PREF_AUTO_UPDATES_CHECK_INTERVAL,
                                     autoCheckInterval.getSelectedItemPosition())
-                            .putBoolean(Constants.PREF_MOBILE_DATA_WARNING,
-                                    dataWarning.isChecked())
+                            .putBoolean(Constants.PREF_METERED_NETWORK_WARNING,
+                                    meteredNetworkWarning.isChecked())
+                            .putBoolean(Constants.PREF_AB_PERF_MODE, abPerfMode.isChecked())
                             .putString(Constants.PREF_CUSTOM_OTA_URL,
                                     customURLStr)
                             .apply();
@@ -567,6 +592,11 @@ public class UpdatesActivity extends UpdatesListActivity implements View.OnClick
                     } else {
                         UpdatesCheckReceiver.cancelRepeatingUpdatesCheck(this);
                         UpdatesCheckReceiver.cancelUpdatesCheck(this);
+                    }
+
+                    if (Utils.isABDevice()) {
+                        boolean enableABPerfMode = abPerfMode.isChecked();
+                        mUpdaterService.getUpdaterController().setPerformanceMode(enableABPerfMode);
                     }
                 })
                 .show();
